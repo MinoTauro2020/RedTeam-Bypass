@@ -119,8 +119,9 @@ impl SAMDumper {
                 .map(|output| output.status.success())
                 .unwrap_or(false)
         } else {
-            // En Unix, verificar si es root (UID 0)
-            unsafe { libc::geteuid() == 0 }
+            // En Unix, verificar si es root verificando permisos
+            // Intentar leer un archivo que requiere root
+            Path::new("/etc/shadow").metadata().is_ok()
         }
     }
 
@@ -343,26 +344,27 @@ impl SAMDumper {
     }
 }
 
-// Módulo simple para obtener hostname (reemplazo de crate hostname)
+// Módulo simple para obtener hostname
 mod hostname {
-    use std::ffi::CStr;
+    use std::process::Command;
     
     pub fn get() -> Result<std::ffi::OsString, ()> {
-        let mut buf = vec![0u8; 256];
-        
-        #[cfg(unix)]
-        unsafe {
-            if libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) == 0 {
-                let cstr = CStr::from_ptr(buf.as_ptr() as *const libc::c_char);
-                return Ok(std::ffi::OsString::from(cstr.to_string_lossy().into_owned()));
+        // En Windows, usar variable de entorno
+        #[cfg(windows)]
+        {
+            if let Ok(name) = std::env::var("COMPUTERNAME") {
+                return Ok(std::ffi::OsString::from(name));
             }
         }
         
-        #[cfg(windows)]
+        // En Unix, usar comando hostname
+        #[cfg(unix)]
         {
-            use std::env;
-            if let Ok(name) = env::var("COMPUTERNAME") {
-                return Ok(std::ffi::OsString::from(name));
+            if let Ok(output) = Command::new("hostname").output() {
+                if output.status.success() {
+                    let hostname = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    return Ok(std::ffi::OsString::from(hostname));
+                }
             }
         }
         
