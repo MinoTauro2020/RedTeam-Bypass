@@ -23,10 +23,7 @@ param(
     [string]$ConfigPath,
 
     [Parameter(Mandatory=$false)]
-    [switch]$QuickMode,
-
-    [Parameter(Mandatory=$false)]
-    [switch]$Verbose
+    [switch]$QuickMode
 )
 
 #Requires -RunAsAdministrator
@@ -278,7 +275,7 @@ try {
     $configContext = @{
         Path = if ($ConfigPath) { $ConfigPath } else { $env:TEMP }
         Quick = $QuickMode.IsPresent
-        Verbosity = $Verbose.IsPresent
+        Verbosity = $PSBoundParameters.ContainsKey('Verbose')
     }
 
     # Execute configuration module in isolated scope
