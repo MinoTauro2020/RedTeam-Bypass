@@ -94,8 +94,8 @@ $script:CleanupRegistered = $false
 
 # Verificar si el tipo WinAPI ya está cargado
 if (-not ([System.Management.Automation.PSTypeName]'WinAPI').Type) {
-    try {
-        Add-Type -TypeDefinition @"
+
+    $apiCode = @"
 using System;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -166,21 +166,141 @@ public class WinAPI {
     public const string SE_RESTORE_NAME = "SeRestorePrivilege";
     public const string SE_DEBUG_NAME = "SeDebugPrivilege";
 }
-"@ -ErrorAction Stop
+"@
+
+    $loadedSuccessfully = $false
+    $lastError = $null
+
+    # Estrategia 1: Compilar directamente sin guardar DLL
+    try {
+        Write-Verbose "Intentando cargar API de Windows (Método 1: Compilación directa)..."
+        Add-Type -TypeDefinition $apiCode -ErrorAction Stop
+        $loadedSuccessfully = $true
+        Write-Verbose "API de Windows cargada exitosamente (Método 1)"
     }
     catch {
-        Write-Warning "Error al cargar tipos de Windows API: $_"
-        Write-Warning "Posibles soluciones:"
-        Write-Warning "  1. Ejecute PowerShell como Administrador"
-        Write-Warning "  2. Verifique permisos en: $env:TEMP"
-        Write-Warning "  3. Deshabilite temporalmente el antivirus"
-        Write-Warning "  4. Reinicie PowerShell y vuelva a intentar"
+        $lastError = $_
+        Write-Verbose "Método 1 falló: $_"
+    }
 
-        # Intentar limpiar el directorio temporal de PowerShell
-        $tempPath = [System.IO.Path]::GetTempPath()
-        Write-Warning "  5. Intente eliminar archivos temporales en: $tempPath"
+    # Estrategia 2: Usar directorio de trabajo actual
+    if (-not $loadedSuccessfully) {
+        try {
+            Write-Verbose "Intentando cargar API de Windows (Método 2: Directorio actual)..."
+            $currentDir = Get-Location
+            $outputAssembly = Join-Path $currentDir.Path "WinAPI_$(Get-Random).dll"
 
-        throw "No se pudo cargar la API de Windows necesaria para el script"
+            Add-Type -TypeDefinition $apiCode -OutputAssembly $outputAssembly -ErrorAction Stop
+
+            # Limpiar DLL temporal si se creó
+            if (Test-Path $outputAssembly) {
+                Start-Sleep -Milliseconds 500
+                Remove-Item $outputAssembly -Force -ErrorAction SilentlyContinue
+            }
+
+            $loadedSuccessfully = $true
+            Write-Verbose "API de Windows cargada exitosamente (Método 2)"
+        }
+        catch {
+            $lastError = $_
+            Write-Verbose "Método 2 falló: $_"
+        }
+    }
+
+    # Estrategia 3: Usar directorio del script
+    if (-not $loadedSuccessfully) {
+        try {
+            Write-Verbose "Intentando cargar API de Windows (Método 3: Directorio del script)..."
+            $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+            if ([string]::IsNullOrEmpty($scriptDir)) {
+                $scriptDir = $PWD.Path
+            }
+
+            $outputAssembly = Join-Path $scriptDir "WinAPI_$(Get-Random).dll"
+
+            Add-Type -TypeDefinition $apiCode -OutputAssembly $outputAssembly -ErrorAction Stop
+
+            # Limpiar DLL temporal si se creó
+            if (Test-Path $outputAssembly) {
+                Start-Sleep -Milliseconds 500
+                Remove-Item $outputAssembly -Force -ErrorAction SilentlyContinue
+            }
+
+            $loadedSuccessfully = $true
+            Write-Verbose "API de Windows cargada exitosamente (Método 3)"
+        }
+        catch {
+            $lastError = $_
+            Write-Verbose "Método 3 falló: $_"
+        }
+    }
+
+    # Estrategia 4: Usar AppData del usuario
+    if (-not $loadedSuccessfully) {
+        try {
+            Write-Verbose "Intentando cargar API de Windows (Método 4: AppData)..."
+            $appData = [Environment]::GetFolderPath('ApplicationData')
+            $outputDir = Join-Path $appData "PSTemp"
+
+            if (-not (Test-Path $outputDir)) {
+                New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+            }
+
+            $outputAssembly = Join-Path $outputDir "WinAPI_$(Get-Random).dll"
+
+            Add-Type -TypeDefinition $apiCode -OutputAssembly $outputAssembly -ErrorAction Stop
+
+            # Limpiar DLL temporal si se creó
+            if (Test-Path $outputAssembly) {
+                Start-Sleep -Milliseconds 500
+                Remove-Item $outputAssembly -Force -ErrorAction SilentlyContinue
+            }
+
+            $loadedSuccessfully = $true
+            Write-Verbose "API de Windows cargada exitosamente (Método 4)"
+        }
+        catch {
+            $lastError = $_
+            Write-Verbose "Método 4 falló: $_"
+        }
+    }
+
+    # Si ninguna estrategia funcionó, mostrar error detallado
+    if (-not $loadedSuccessfully) {
+        Write-Host ""
+        Write-Warning "════════════════════════════════════════════════════════════"
+        Write-Warning "  ERROR: No se pudo cargar la API de Windows"
+        Write-Warning "════════════════════════════════════════════════════════════"
+        Write-Warning ""
+        Write-Warning "Error detectado: $($lastError.Exception.Message)"
+        Write-Warning ""
+        Write-Warning "SOLUCIONES RECOMENDADAS:"
+        Write-Warning ""
+        Write-Warning "1. EJECUTAR COMO ADMINISTRADOR (Recomendado)"
+        Write-Warning "   • Click derecho en PowerShell -> 'Ejecutar como administrador'"
+        Write-Warning ""
+        Write-Warning "2. DESBLOQUEAR EJECUCIÓN DE SCRIPTS"
+        Write-Warning "   Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass"
+        Write-Warning ""
+        Write-Warning "3. LIMPIAR DIRECTORIO TEMPORAL"
+        Write-Warning "   Remove-Item `"$env:TEMP\*`" -Recurse -Force -ErrorAction SilentlyContinue"
+        Write-Warning ""
+        Write-Warning "4. VERIFICAR ANTIVIRUS/DEFENDER"
+        Write-Warning "   • El antivirus puede estar bloqueando la compilación de código"
+        Write-Warning "   • Agregue una excepción temporal para PowerShell"
+        Write-Warning ""
+        Write-Warning "5. VERIFICAR PERMISOS EN:"
+        Write-Warning "   • $env:TEMP"
+        Write-Warning "   • $(Get-Location)"
+        Write-Warning "   • $([Environment]::GetFolderPath('ApplicationData'))"
+        Write-Warning ""
+        Write-Warning "6. REINICIAR POWERSHELL"
+        Write-Warning "   • Cierre todas las ventanas de PowerShell"
+        Write-Warning "   • Abra una nueva sesión como Administrador"
+        Write-Warning ""
+        Write-Host ""
+
+        throw "No se pudo cargar la API de Windows. Consulte las soluciones recomendadas arriba."
     }
 }
 else {
