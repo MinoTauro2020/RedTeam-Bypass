@@ -92,7 +92,10 @@ $script:CleanupRegistered = $false
 # Tipos de Windows API
 # ============================================
 
-Add-Type -TypeDefinition @"
+# Verificar si el tipo WinAPI ya está cargado
+if (-not ([System.Management.Automation.PSTypeName]'WinAPI').Type) {
+    try {
+        Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -163,7 +166,26 @@ public class WinAPI {
     public const string SE_RESTORE_NAME = "SeRestorePrivilege";
     public const string SE_DEBUG_NAME = "SeDebugPrivilege";
 }
-"@ -ErrorAction SilentlyContinue
+"@ -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Error al cargar tipos de Windows API: $_"
+        Write-Warning "Posibles soluciones:"
+        Write-Warning "  1. Ejecute PowerShell como Administrador"
+        Write-Warning "  2. Verifique permisos en: $env:TEMP"
+        Write-Warning "  3. Deshabilite temporalmente el antivirus"
+        Write-Warning "  4. Reinicie PowerShell y vuelva a intentar"
+
+        # Intentar limpiar el directorio temporal de PowerShell
+        $tempPath = [System.IO.Path]::GetTempPath()
+        Write-Warning "  5. Intente eliminar archivos temporales en: $tempPath"
+
+        throw "No se pudo cargar la API de Windows necesaria para el script"
+    }
+}
+else {
+    Write-Verbose "Tipo WinAPI ya está cargado en la sesión actual"
+}
 
 # ============================================
 # Funciones de Utilidad
